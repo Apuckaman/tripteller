@@ -1,8 +1,23 @@
 /**
  * poi router
  */
-
-import { factories } from '@strapi/strapi';
-
-
-export default factories.createCoreRouter('api::poi.poi' as any);
+export default {
+  routes: [
+    {
+      method: 'GET',
+      path: '/pois',
+      handler: 'poi.find',
+      config: {
+        auth: false
+      }
+    },
+    {
+      method: 'GET', 
+      path: '/pois/:id',
+      handler: 'poi.findOne',
+      config: {
+        auth: false
+      }
+    }
+  ]
+}
