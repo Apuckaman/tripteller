@@ -5,10 +5,10 @@ import type { Poi } from "../lib/pois";
 type GeofenceEvent = { type: "enter" | "exit"; poi: Poi; distance: number };
 
 type Options = {
-  radiusDefault?: number;   // m
-  highAccuracy?: boolean;   // GPS bekapcsolása mobilon
-  cooldownMs?: number;      // minimális idő két trigger között
-  accuracyMax?: number;     // ha pontosság > accuracyMax, ne frissítsen
+  radiusDefault?: number;
+  highAccuracy?: boolean;
+  cooldownMs?: number;
+  accuracyMax?: number;
 };
 
 export function useGeofencing(
@@ -22,27 +22,48 @@ export function useGeofencing(
     accuracyMax = 2000,
   } = opts;
 
-  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
   const [insidePoi, setInsidePoi] = useState<Poi | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   const listenersRef = useRef<Array<(e: GeofenceEvent) => void>>([]);
   const cooldownUntilRef = useRef<number>(0);
 
-  // Geolokáció figyelése
+  // GPS követés
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      console.warn("❌ Geolocation nem érhető el a böngészőben.");
+      return;
+    }
+
+    console.log("📍 STARTING GPS TRACKING (highAccuracy:", highAccuracy, ")");
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        if (accuracy && accuracyMax && accuracy > accuracyMax) return;
+        console.log("📍 GPS POSITION:", lat, lng, "Accuracy:", accuracy);
+
+        if (accuracy && accuracyMax && accuracy > accuracyMax) {
+          console.log(
+            "⚠ Pozíció túl pontatlan, kihagyjuk. accuracy:",
+            accuracy,
+            "limit:",
+            accuracyMax
+          );
+          return;
+        }
+
         setPosition({ lat, lng });
       },
-      (err) => {
-        console.warn("Geolocation error:", err);
-      },
-      { enableHighAccuracy: highAccuracy, maximumAge: 3000, timeout: 10000 }
+      (err) => console.warn("❌ GEOLOCATION ERROR:", err),
+      {
+        enableHighAccuracy: highAccuracy,
+        maximumAge: 3000,
+        timeout: 10000,
+      }
     );
+
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
@@ -50,45 +71,55 @@ export function useGeofencing(
     };
   }, [highAccuracy, accuracyMax]);
 
-  // Belépés / kilépés detektálás
+  // Geofence logika
   useEffect(() => {
     if (!position) return;
 
     const now = Date.now();
     let nearest: { poi: Poi; dist: number } | null = null;
 
+    console.log("📍 CHECKING POIS - User position:", position);
+
     for (const p of pois) {
       const r = p.radius ?? radiusDefault;
       const d = haversineMeters(position.lat, position.lng, p.lat, p.lng);
+      console.log(`   📍 ${p.name}: ${d}m / ${r}m radius`);
+
       if (d <= r && (!nearest || d < nearest.dist)) {
         nearest = { poi: p, dist: d };
       }
     }
 
-    const currentlyInside = !!nearest;
     const wasInside = !!insidePoi;
+    const currentlyInside = !!nearest;
 
-    if (currently=false && wasInside) {
+    // KILÉPÉS
+    if (!currentlyInside && wasInside) {
       const prev = insidePoi!;
+      console.log("🚪 EXIT POI:", prev.name);
       setInsidePoi(null);
-      listenersRef.current.forEach((fn) => fn({ type: "exit", poi: prev, distance: Infinity }));
+      listenersRef.current.forEach((fn) =>
+        fn({ type: "exit", poi: prev, distance: Infinity })
+      );
       return;
     }
 
+    // BELÉPÉS
     if (nearest) {
       if (!wasInside && now >= cooldownUntilRef.current) {
+        console.log("🚪 ENTER POI:", nearest.poi.name, "Distance:", nearest.dist);
         setInsidePoi(nearest.poi);
         cooldownUntilRef.current = now + cooldownMs;
+
         listenersRef.current.forEach((fn) =>
           fn({ type: "enter", poi: nearest!.poi, distance: nearest!.dist })
         );
       } else {
-        setInsidePoi(nearest.poi); // bent maradunk
+        setInsidePoi(nearest.poi);
       }
     }
   }, [position, pois, insidePoi, radiusDefault, cooldownMs]);
 
-  // Eseményfeliratkozás
   const onEvent = (handler: (e: GeofenceEvent) => void) => {
     listenersRef.current.push(handler);
     return () => {

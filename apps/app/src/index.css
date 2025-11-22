@@ -1,8 +1,13 @@
-html, body, #root {
+html, body {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
+}
+
+#root {
+  height: 100vh;      /* A teljes viewport magasságát kapja */
+  width: 100%;
 }
 
 body {
@@ -12,4 +17,10 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* LEAFLET TÉRKÉP FIX – EZ A LÉNYEG */
+.leaflet-container {
+  width: 100%;
+  height: 100%;      /* a #root 100vh-hoz igazodik */
 }
