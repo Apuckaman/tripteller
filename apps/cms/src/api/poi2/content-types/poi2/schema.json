@@ -1,0 +1,151 @@
+{
+  "kind": "collectionType",
+  "collectionName": "poi2s",
+  "info": {
+    "singularName": "poi2",
+    "pluralName": "poi2s",
+    "displayName": "POI2"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {
+    "i18n": {
+      "localized": true
+    }
+  },
+  "attributes": {
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "lat": {
+      "type": "decimal",
+      "required": true,
+      "min": -90,
+      "max": 90
+    },
+    "lng": {
+      "type": "decimal",
+      "required": true,
+      "min": -180,
+      "max": 180
+    },
+    "radius": {
+      "type": "decimal"
+    },
+    "country": {
+      "type": "text"
+    },
+    "city": {
+      "type": "text"
+    },
+    "category": {
+      "type": "text"
+    },
+    "subcategory": {
+      "type": "text"
+    },
+    "priority": {
+      "type": "integer"
+    },
+    "sequence_order": {
+      "type": "integer"
+    },
+    "duration_minutes": {
+      "type": "integer"
+    },
+    "active": {
+      "type": "boolean"
+    },
+    "tags": {
+      "type": "text"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "draft",
+        "ready",
+        "needs_review",
+        "needs_translation",
+        "missing_images"
+      ]
+    },
+    "external_links": {
+      "type": "text"
+    },
+    "walking_distance_m_from_prev": {
+      "type": "integer"
+    },
+    "audio_speed": {
+      "type": "decimal",
+      "min": 0.8,
+      "max": 1.2
+    },
+    "audio_pitch": {
+      "type": "decimal",
+      "min": -5,
+      "max": 5
+    },
+    "child_friendly": {
+      "type": "boolean"
+    },
+    "age_rating": {
+      "type": "enumeration",
+      "enum": [
+        "general",
+        "age_7_plus",
+        "age_12_plus",
+        "age_16_plus",
+        "age_18_plus"
+      ]
+    },
+    "images": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": [
+        "images"
+      ]
+    },
+    "related_pois": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::poi2.poi2"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "intro": {
+      "type": "blocks",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "interesting_facts": {
+      "type": "blocks",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "legends": {
+      "type": "blocks",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    }
+  }
+}
+
