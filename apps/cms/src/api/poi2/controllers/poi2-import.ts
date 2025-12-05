@@ -16,8 +16,20 @@ export default {
       const dryRun = ctx.query.dryRun === 'true' || ctx.query.dryRun === '1';
 
       // Read CSV file (UTF-8)
+      // Handle different file upload structures (koa-body can use different property names)
       const fs = require('fs');
-      const csvContent = fs.readFileSync(file.path, 'utf8');
+      let filePath: string | undefined = file.path || file.filepath || file.tempFilePath;
+      let csvContent: string;
+
+      if (filePath) {
+        // File was saved to disk
+        csvContent = fs.readFileSync(filePath, 'utf8');
+      } else if (file.buffer) {
+        // File is in memory as buffer
+        csvContent = file.buffer.toString('utf8');
+      } else {
+        return ctx.badRequest('Could not read uploaded file. File structure: ' + JSON.stringify(Object.keys(file)));
+      }
       
       // Parse CSV lines
       const lines = csvContent
@@ -245,9 +257,10 @@ export default {
         }
       }
 
-      // Clean up uploaded file
-      if (file.path && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
+      // Clean up uploaded file (if it was saved to disk)
+      const cleanupPath = file.path || file.filepath || file.tempFilePath;
+      if (cleanupPath && fs.existsSync(cleanupPath)) {
+        fs.unlinkSync(cleanupPath);
       }
 
       return ctx.send({
