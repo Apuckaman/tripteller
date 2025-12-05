@@ -31,25 +31,105 @@ export default {
         return ctx.badRequest('Could not read uploaded file. File structure: ' + JSON.stringify(Object.keys(file)));
       }
       
-      // Parse CSV lines
-      const lines = csvContent
-        .split(/\r?\n/)
-        .map((line: string) => line.trim())
-        .filter((line: string) => line.length > 0);
+      // Helper function to parse CSV line with proper quote handling
+      const parseCSVLine = (line: string, delimiter: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          const nextChar = line[i + 1];
+          
+          if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+              // Escaped quote (double quote)
+              current += '"';
+              i++; // Skip next quote
+            } else {
+              // Toggle quote state
+              inQuotes = !inQuotes;
+            }
+          } else if (char === delimiter && !inQuotes) {
+            // Field separator found outside quotes
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        // Add last field
+        result.push(current.trim());
+        return result;
+      };
 
-      if (lines.length < 2) {
+      // Detect delimiter (try comma, semicolon, tab)
+      const detectDelimiter = (firstLine: string): string => {
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        const semicolonCount = (firstLine.match(/;/g) || []).length;
+        const tabCount = (firstLine.match(/\t/g) || []).length;
+        
+        if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
+        if (semicolonCount > commaCount) return ';';
+        return ','; // Default to comma
+      };
+
+      // Parse CSV lines - handle multi-line quoted fields
+      const rawLines = csvContent.split(/\r?\n/);
+      const lines: string[] = [];
+      let currentLine = '';
+      let inQuotes = false;
+
+      for (const rawLine of rawLines) {
+        if (currentLine === '') {
+          currentLine = rawLine;
+        } else {
+          currentLine += '\n' + rawLine;
+        }
+
+        // Count quotes in the line
+        let quoteCount = 0;
+        for (let i = 0; i < currentLine.length; i++) {
+          if (currentLine[i] === '"' && (i === 0 || currentLine[i - 1] !== '"')) {
+            quoteCount++;
+          }
+        }
+
+        // If even number of quotes, the line is complete
+        if (quoteCount % 2 === 0) {
+          lines.push(currentLine.trim());
+          currentLine = '';
+        }
+      }
+
+      // Add last line if exists
+      if (currentLine.trim()) {
+        lines.push(currentLine.trim());
+      }
+
+      // Filter empty lines
+      const nonEmptyLines = lines.filter((line: string) => line.length > 0);
+
+      if (nonEmptyLines.length < 2) {
         return ctx.badRequest('CSV file must contain at least a header row and one data row.');
       }
 
+      // Detect delimiter from first line
+      const delimiter = detectDelimiter(nonEmptyLines[0]);
+
       // Parse header
-      const headerLine = lines[0];
-      const headers = headerLine.split(';').map((h: string) => h.trim());
+      const headerLine = nonEmptyLines[0];
+      const headers = parseCSVLine(headerLine, delimiter).map((h: string) => {
+        // Remove surrounding quotes if present
+        return h.replace(/^"(.*)"$/, '$1').trim();
+      });
 
       if (!headers.includes('slug')) {
-        return ctx.badRequest('CSV file must contain a "slug" column.');
+        return ctx.badRequest(`CSV file must contain a "slug" column. Found columns: ${headers.join(', ')}`);
       }
 
-      const dataLines = lines.slice(1);
+      const dataLines = nonEmptyLines.slice(1);
 
       // Statistics
       const stats = {
@@ -102,11 +182,16 @@ export default {
           continue;
         }
 
-        const cols = line.split(';');
+        // Parse CSV line with proper delimiter and quote handling
+        const cols = parseCSVLine(line, delimiter).map((col: string) => {
+          // Remove surrounding quotes if present
+          return col.replace(/^"(.*)"$/, '$1').trim();
+        });
+        
         const row: Record<string, string> = {};
         
         headers.forEach((header, idx) => {
-          row[header] = cols[idx] !== undefined ? cols[idx].trim() : '';
+          row[header] = cols[idx] !== undefined ? cols[idx] : '';
         });
 
         // Check for slug (required)
