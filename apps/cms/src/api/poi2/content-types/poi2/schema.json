@@ -24,13 +24,17 @@
       "type": "decimal",
       "required": true,
       "min": -90,
-      "max": 90
+      "max": 90,
+      "precision": 10,
+      "scale": 8
     },
     "lng": {
       "type": "decimal",
       "required": true,
       "min": -180,
-      "max": 180
+      "max": 180,
+      "precision": 10,
+      "scale": 8
     },
     "radius": {
       "type": "decimal"
@@ -80,26 +84,24 @@
     },
     "audio_speed": {
       "type": "decimal",
-      "min": 0.8,
-      "max": 1.2
+      "min": 0.5,
+      "max": 2.0,
+      "default": 1.0
     },
     "audio_pitch": {
       "type": "decimal",
-      "min": -5,
-      "max": 5
+      "min": -10,
+      "max": 10,
+      "default": 0
     },
     "child_friendly": {
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     },
     "age_rating": {
-      "type": "enumeration",
-      "enum": [
-        "general",
-        "age_7_plus",
-        "age_12_plus",
-        "age_16_plus",
-        "age_18_plus"
-      ]
+      "type": "integer",
+      "min": 0,
+      "max": 18
     },
     "images": {
       "type": "media",
@@ -148,4 +150,3 @@
     }
   }
 }
-
