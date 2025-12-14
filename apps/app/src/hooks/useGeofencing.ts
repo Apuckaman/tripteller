@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { haversineMeters } from "../lib/geo";
 import type { Poi } from "../lib/pois";
 
-type GeofenceEvent = { type: "enter" | "exit"; poi: Poi; distance: number };
+type GeofenceEvent = { type: "enter" | "exit" | "approaching"; poi: Poi; distance: number };
 
 type Options = {
   radiusDefault?: number;
   highAccuracy?: boolean;
   cooldownMs?: number;
   accuracyMax?: number;
+  approachingDistance?: number; // Távolság méterben, amikor közeledésnek számít
 };
 
 export function useGeofencing(
@@ -20,16 +21,19 @@ export function useGeofencing(
     highAccuracy = true,
     cooldownMs = 15000,
     accuracyMax = 2000,
+    approachingDistance = 300, // 300m közeledés
   } = opts;
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
     null
   );
   const [insidePoi, setInsidePoi] = useState<Poi | null>(null);
+  const [approachingPoi, setApproachingPoi] = useState<{ poi: Poi; distance: number } | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   const listenersRef = useRef<Array<(e: GeofenceEvent) => void>>([]);
   const cooldownUntilRef = useRef<number>(0);
+  const approachingCooldownRef = useRef<Record<number, number>>({}); // POI ID -> timestamp
 
   // GPS követés
   useEffect(() => {
@@ -76,7 +80,8 @@ export function useGeofencing(
     if (!position) return;
 
     const now = Date.now();
-    let nearest: { poi: Poi; dist: number } | null = null;
+    let nearest: { poi: Poi; distance: number } | null = null;
+    let nearestApproaching: { poi: Poi; distance: number } | null = null;
 
     console.log("📍 CHECKING POIS - User position:", position);
 
@@ -85,20 +90,28 @@ export function useGeofencing(
       const d = haversineMeters(position.lat, position.lng, p.lat, p.lng);
       console.log(`   📍 ${p.name}: ${d}m / ${r}m radius`);
 
-      if (d <= r && (!nearest || d < nearest.dist)) {
-        nearest = { poi: p, dist: d };
+      // Belépés észlelése
+      if (d <= r && (!nearest || d < nearest.distance)) {
+        nearest = { poi: p, distance: d };
+      }
+
+      // Közeledés észlelése (kívül van a körzeten, de közel)
+      if (d > r && d <= approachingDistance && (!nearestApproaching || d < nearestApproaching.distance)) {
+        nearestApproaching = { poi: p, distance: d };
       }
     }
 
     const wasInside = !!insidePoi;
     const currentlyInside = !!nearest;
+    const prevApproachingPoi = approachingPoi;
 
     // KILÉPÉS
     if (!currentlyInside && wasInside) {
       const prev = insidePoi!;
       console.log("🚪 EXIT POI:", prev.name);
       setInsidePoi(null);
-      listenersRef.current.forEach((fn) =>
+      setApproachingPoi(null);
+      listenersRef.current.forEach((fn: (e: GeofenceEvent) => void) =>
         fn({ type: "exit", poi: prev, distance: Infinity })
       );
       return;
@@ -107,25 +120,46 @@ export function useGeofencing(
     // BELÉPÉS
     if (nearest) {
       if (!wasInside && now >= cooldownUntilRef.current) {
-        console.log("🚪 ENTER POI:", nearest.poi.name, "Distance:", nearest.dist);
+        console.log("🚪 ENTER POI:", nearest.poi.name, "Distance:", nearest.distance);
         setInsidePoi(nearest.poi);
+        setApproachingPoi(null); // Belépéskor nincs már közeledés
         cooldownUntilRef.current = now + cooldownMs;
 
-        listenersRef.current.forEach((fn) =>
-          fn({ type: "enter", poi: nearest!.poi, distance: nearest!.dist })
+        listenersRef.current.forEach((fn: (e: GeofenceEvent) => void) =>
+          fn({ type: "enter", poi: nearest!.poi, distance: nearest!.distance })
         );
       } else {
         setInsidePoi(nearest.poi);
       }
     }
-  }, [position, pois, insidePoi, radiusDefault, cooldownMs]);
+
+    // KÖZELEDÉS (csak ha nincs belépés)
+    if (!currentlyInside && nearestApproaching) {
+      const wasApproachingSame = prevApproachingPoi?.poi.id === nearestApproaching.poi.id;
+      const approachingCooldown = approachingCooldownRef.current[nearestApproaching.poi.id] || 0;
+      
+      if (!wasApproachingSame || (now >= approachingCooldown && Math.abs((prevApproachingPoi?.distance || 0) - nearestApproaching.distance) > 50)) {
+        console.log("🎯 APPROACHING POI:", nearestApproaching.poi.name, "Distance:", nearestApproaching.distance);
+        setApproachingPoi(nearestApproaching);
+        approachingCooldownRef.current[nearestApproaching.poi.id] = now + cooldownMs;
+        
+        listenersRef.current.forEach((fn: (e: GeofenceEvent) => void) =>
+          fn({ type: "approaching", poi: nearestApproaching!.poi, distance: nearestApproaching!.distance })
+        );
+      } else {
+        setApproachingPoi(nearestApproaching);
+      }
+    } else if (!nearestApproaching && prevApproachingPoi) {
+      setApproachingPoi(null);
+    }
+  }, [position, pois, insidePoi, approachingPoi, radiusDefault, approachingDistance, cooldownMs]);
 
   const onEvent = (handler: (e: GeofenceEvent) => void) => {
     listenersRef.current.push(handler);
     return () => {
-      listenersRef.current = listenersRef.current.filter((h) => h !== handler);
+      listenersRef.current = listenersRef.current.filter((h: (e: GeofenceEvent) => void) => h !== handler);
     };
   };
 
-  return { position, insidePoi, onEvent };
+  return { position, insidePoi, approachingPoi, onEvent };
 }
