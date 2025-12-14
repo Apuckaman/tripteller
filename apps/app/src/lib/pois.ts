@@ -10,29 +10,69 @@ export type Poi = {
 
 const STRAPI_URL = import.meta.env.VITE_STRAPI_URL || "http://localhost:1337";
 
-// POI2 mapping - nincs audio mező
+// Extract text from Strapi blocks field
+function extractTextFromBlocks(blocks: any): string | undefined {
+  if (!blocks || !Array.isArray(blocks)) return undefined;
+  
+  const texts: string[] = [];
+  
+  function traverse(block: any) {
+    if (typeof block === 'string') {
+      texts.push(block);
+      return;
+    }
+    if (typeof block !== 'object' || block === null) return;
+    
+    // Strapi blocks structure: { type: 'paragraph', children: [{ type: 'text', text: '...' }] }
+    if (block.text) {
+      texts.push(block.text);
+    }
+    if (block.children && Array.isArray(block.children)) {
+      block.children.forEach(traverse);
+    }
+    if (Array.isArray(block)) {
+      block.forEach(traverse);
+    }
+  }
+  
+  blocks.forEach(traverse);
+  
+  const result = texts.filter(t => t && t.trim()).join(' ').trim();
+  return result || undefined;
+}
+
+// POI2 mapping - használja az intro, interesting_facts, legends mezőket TTS-hez
 function mapOne(item: any): Poi {
   // 1) Lapos formátum (Strapi 5 default)
   if (item && typeof item.name === "string") {
+    // Try to extract text from blocks fields (priority: intro > interesting_facts > legends)
+    const ttsText = extractTextFromBlocks(item.intro) 
+      || extractTextFromBlocks(item.interesting_facts) 
+      || extractTextFromBlocks(item.legends);
+    
     return {
       id: item.id,
       name: item.name,
       lat: parseFloat(item.lat) || 0,
       lng: parseFloat(item.lng) || 0,
       radius: parseFloat(item.radius) || 150,
-      ttsText: undefined, // POI2-nek nincs ttsText mezője
+      ttsText: ttsText,
       audioUrl: undefined, // POI2-nek nincs audio mezője
     };
   }
   // 2) Klasszikus (attributes-ben) - ha mégis így jön
   const a = item?.attributes ?? {};
+  const ttsText = extractTextFromBlocks(a.intro) 
+    || extractTextFromBlocks(a.interesting_facts) 
+    || extractTextFromBlocks(a.legends);
+  
   return {
     id: item.id,
     name: a.name || '',
     lat: parseFloat(a.lat) || 0,
     lng: parseFloat(a.lng) || 0,
     radius: parseFloat(a.radius) || 150,
-    ttsText: undefined,
+    ttsText: ttsText,
     audioUrl: undefined,
   };
 }
